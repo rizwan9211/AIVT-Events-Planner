@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:,"><title>AIVT Events - AI Wedding &amp; Birthday Planner</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/appwrite@15.0.0/dist/iife/sdk.js"></script>
+<style>
+  :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  body{font-family:'Inter',sans-serif;background:#0b0714;color:#ece8f5}
+  h1,h2,h3,.disp{font-family:'Bricolage Grotesque',sans-serif}
+  .grad{background:linear-gradient(90deg,#ff00a0,#a000ff)}
+  .grad-text{background:linear-gradient(90deg,#ff00a0,#a000ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .panel{background:#150e24;border:1px solid #2a1f42;border-radius:18px}
+  .field{width:100%;background:#0b0714;border:1px solid #33264f;border-radius:10px;padding:.65rem .8rem;color:#fff}
+  .field:focus{outline:2px solid #ff00a0;outline-offset:1px}
+  input[type=range]{accent-color:#ff00a0;width:100%}
+  .btn:disabled{opacity:.6;cursor:wait}
+  .spin{width:38px;height:38px;border:4px solid #33264f;border-top-color:#ff00a0;border-radius:50%;animation:s 1s linear infinite}
+  @keyframes s{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){.spin{animation-duration:3s}}
+  .tl{border-left:2px solid #3b2a5e}
+  .tl li::before{content:"";position:absolute;left:-7px;top:.35rem;width:12px;height:12px;border-radius:50%;background:#ff00a0}
+</style>
+</head>
+<body>
+<header class="px-5 pt-14 pb-10 text-center max-w-3xl mx-auto">
+  <h1 class="text-4xl sm:text-5xl font-extrabold leading-tight">AIVT Events - <span class="grad-text">AI Wedding &amp; Birthday Planner</span></h1>
+  <p class="mt-4 text-lg text-violet-200">Plan Your Noida Wedding in 2 Minutes with AI</p>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 pb-16 grid lg:grid-cols-5 gap-6">
+  <!-- FORM -->
+  <section class="panel p-5 lg:col-span-2 h-fit">
+    <h2 class="text-xl font-bold mb-4">Tell us about your event</h2>
+    <form id="f" class="space-y-4">
+      <label class="block text-sm">Event name
+        <input id="name" class="field mt-1" placeholder="Pooja's Wedding" required></label>
+      <label class="block text-sm">Event type
+        <select id="type" class="field mt-1"><option>Wedding</option><option>Birthday</option><option>Corporate</option><option>Community Event</option></select></label>
+      <label class="block text-sm">Budget: <b id="bv" class="grad-text">₹5,00,000</b>
+        <input id="budget" type="range" min="50000" max="2000000" step="10000" value="500000" class="mt-2"></label>
+      <div class="flex justify-between text-xs text-violet-300 -mt-3"><span>₹50k</span><span>₹20 Lakh</span></div>
+      <label class="block text-sm">Guest count
+        <input id="guests" type="number" min="10" max="5000" value="150" class="field mt-1" required></label>
+      <label class="block text-sm">Location
+        <input id="loc" class="field mt-1" value="Noida" required></label>
+      <label class="block text-sm">Event date
+        <input id="date" type="date" class="field mt-1" required></label>
+      <button id="go" class="btn grad w-full py-3 rounded-xl font-bold text-white text-lg hover:opacity-90">✨ Generate AI Plan</button>
+    </form>
+  </section>
+
+  <!-- OUTPUT -->
+  <section id="out" class="lg:col-span-3 space-y-5" aria-live="polite">
+    <div id="empty" class="panel p-8 text-center text-violet-200">Your budget, 30-day timeline, Noida vendors and personalized ideas will appear here.</div>
+  </section>
+</main>
+
+<footer class="text-center text-xs text-violet-300 pb-8 px-4">AIVT Events · Powered by Google Gemini via Appwrite · Vendor details are sample data</footer>
+
+<script>
+// ======== APPWRITE CONFIG (replace placeholders) ========
+const PROJECT_ID  = 'YOUR_PROJECT_ID';
+const FUNCTION_ID = 'YOUR_FUNCTION_ID';
+const { Client, Functions } = Appwrite;
+const client = new Client().setEndpoint('https://cloud.appwrite.io/v1').setProject(PROJECT_ID);
+const functions = new Functions(client);
+// Auth (optional): const account = new Appwrite.Account(client); await account.createAnonymousSession();
+
+const $ = id => document.getElementById(id);
+const inr = n => '₹' + Math.round(n).toLocaleString('en-IN');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+$('date').value = new Date(Date.now() + 30*864e5).toISOString().slice(0,10);
+$('budget').oninput = e => $('bv').textContent = inr(e.target.value);
+
+$('f').onsubmit = async e => {
+  e.preventDefault();
+  const d = { eventName:$('name').value.trim(), eventType:$('type').value, budget:+$('budget').value,
+              guests:+$('guests').value, location:$('loc').value.trim(), date:$('date').value };
+  $('go').disabled = true;
+  $('out').innerHTML = `<div class="panel p-10 flex flex-col items-center gap-4"><div class="spin"></div><p class="font-semibold">AI is creating your plan...</p></div>`;
+  let plan, demo = false;
+  try {
+    if (PROJECT_ID.startsWith('YOUR_') || FUNCTION_ID.startsWith('YOUR_')) throw new Error('not configured');
+    const ex = await functions.createExecution(FUNCTION_ID, JSON.stringify(d), false);
+    if (ex.responseStatusCode >= 400) throw new Error(ex.responseBody);
+    plan = JSON.parse(ex.responseBody);
+  } catch (err) {
+    console.warn('Using demo plan:', err.message);
+    plan = demoPlan(d); demo = true;
+  }
+  render(normalize(plan, d.budget), d, demo);
+  $('go').disabled = false;
+};
+
+// Make budget rows add up exactly to the chosen budget
+function normalize(p, budget){
+  const rows = (p.budget || []).map(r => ({category:r.category, amount:+r.amount || 0}));
+  const sum = rows.reduce((a,r)=>a+r.amount,0) || 1;
+  rows.forEach(r => r.amount = Math.round(r.amount / sum * budget));
+  const diff = budget - rows.reduce((a,r)=>a+r.amount,0);
+  if (rows.length) rows[rows.length-1].amount += diff;
+  (p.vendors || []).forEach(v => v.contact = '+91 9266707624');
+  p.budget = rows; return p;
+}
+
+function demoPlan(d){
+  const w = d.eventType === 'Wedding';
+  return {
+    budget:[{category:'Catering',amount:d.budget*.4},{category:'Venue',amount:d.budget*.3},{category:'Decor',amount:d.budget*.2},{category:'Misc (DJ, photo, gifts)',amount:d.budget*.1}],
+    timeline:[
+      {day:30,task:`Book venue in ${d.location} and fix the date`},{day:25,task:'Shortlist caterer, hold tasting slot'},
+      {day:21,task:'Send save-the-date on WhatsApp'},{day:15,task:'Finalize catering menu and guest list'},
+      {day:10,task:'Confirm decor, DJ and photographer'},{day:7,task:'Order return gifts, outfits and invites'},
+      {day:3,task:'Final headcount to venue and caterer'},{day:1,task:'Decor setup and sound check'},{day:0,task:'Enjoy ' + d.eventName + '!'}],
+    vendors:[
+      {name:'Royal Feast Caterers',category:'Caterer',price:`${inr(d.budget*.4/d.guests)} per plate`,contact:'+91 9266707624'},
+      {name:'Floral Palace Decorators',category:'Decor',price:inr(d.budget*.2),contact:'+91 9266707624'},
+      {name:'DJ Rohit Beats',category:'DJ',price:'₹25,000 - ₹40,000',contact:'+91 9266707624'},
+      {name:'Click Moments Studio',category:'Photographer',price:'₹40,000 - ₹70,000',contact:'+91 9266707624'},
+      {name:'Sector 62 Banquet Hall',category:'Venue',price:inr(d.budget*.3),contact:'+91 9266707624'}],
+    ideas: w ? [
+      {title:'Flower Holi Haldi Ceremony',desc:'Marigold petals and pastel colour powder for a joyful turmeric ceremony.'},
+      {title:'Live Drummer Groom Entry',desc:'Live drummers and a flower-shower entry for the groom\'s procession.'},
+      {title:'Henna & Street Food Counter',desc:'Live street-food, ice cream and lassi stalls with a folk singer.'}] : [
+      {title:'Traditional Fair Theme',desc:'Street-food stalls, a puppet show and a colourful floor-art entrance.'},
+      {title:'Live Drum Welcome',desc:'Live drum beats to greet guests, then a Bollywood dance-off.'},
+      {title:'Flowers & Lamps Decor',desc:'Marigold garlands, oil lamps and a selfie wall in bright colours.'}]
+  };
+}
+
+function render(p, d, demo){
+  const total = p.budget.reduce((a,r)=>a+r.amount,0);
+  $('out').innerHTML = `
+  ${demo ? `<div class="rounded-xl border border-yellow-500/40 bg-yellow-500/10 text-yellow-200 text-sm p-3">Demo mode: add your Appwrite Project ID and Function ID to get live Gemini plans.</div>` : ''}
+  <div class="panel p-5"><h3 class="text-lg font-bold mb-1">Budget breakdown</h3>
+    <p class="text-sm text-violet-300 mb-3">${esc(d.eventName)} · ${esc(d.eventType)} · ${d.guests} guests · ${esc(d.location)}</p>
+    <div class="overflow-x-auto"><table class="w-full text-sm">
+      <thead class="text-left text-violet-300"><tr><th class="py-2">Category</th><th>Amount</th><th>%</th></tr></thead>
+      <tbody>${p.budget.map(r=>`<tr class="border-t border-[#2a1f42]"><td class="py-2">${esc(r.category)}</td><td>${inr(r.amount)}</td>
+        <td class="w-40"><div class="flex items-center gap-2"><div class="h-2 rounded grad" style="width:${(r.amount/total*100).toFixed(0)}%"></div>${(r.amount/total*100).toFixed(0)}%</div></td></tr>`).join('')}
+      <tr class="border-t border-[#2a1f42] font-bold"><td class="py-2">Total</td><td>${inr(total)}</td><td>100%</td></tr></tbody></table></div></div>
+
+  <div class="panel p-5"><h3 class="text-lg font-bold mb-3">30-day timeline</h3>
+    <ul class="tl ml-2 pl-5 space-y-3">${p.timeline.map((t,i)=>`<li class="relative"><label class="flex gap-3 cursor-pointer">
+      <input type="checkbox" class="mt-1 accent-[#ff00a0]"><span><b class="grad-text">${t.day==0?'Event day':'Day '+esc(t.day)}</b> · ${esc(t.task)}</span></label></li>`).join('')}</ul></div>
+
+  <div class="panel p-5"><h3 class="text-lg font-bold mb-3">Vendor checklist for ${esc(d.location)}</h3>
+    <div class="grid sm:grid-cols-2 gap-3">${p.vendors.map(v=>`<label class="flex gap-3 bg-[#0b0714] border border-[#2a1f42] rounded-xl p-3 cursor-pointer">
+      <input type="checkbox" class="mt-1 accent-[#ff00a0]"><span class="text-sm"><b>${esc(v.name)}</b><br><span class="text-violet-300">${esc(v.category)} · ${esc(v.price)}</span><br><a href="tel:+919266707624" class="underline text-pink-300">${esc(v.contact)}</a></span></label>`).join('')}</div></div>
+
+  <div class="panel p-5"><h3 class="text-lg font-bold mb-3">3 personalized ideas for you</h3>
+    <div class="space-y-3">${p.ideas.map(i=>`<div class="rounded-xl p-4 border border-[#33264f] bg-gradient-to-r from-[#ff00a0]/10 to-[#a000ff]/10"><b>${esc(i.title)}</b><p class="text-sm text-violet-200 mt-1">${esc(i.desc)}</p></div>`).join('')}</div></div>`;
+  $('out').scrollIntoView({behavior:'smooth', block:'start'});
+}
+</script>
+</body>
+</html>
